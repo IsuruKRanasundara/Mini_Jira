@@ -85,6 +85,7 @@ function validateEmail(value: string): string {
 function validatePassword(value: string): string {
   if (!value) return "Password is required";
   if (value.length < 8) return "At least 8 characters required";
+  
   return "";
 }
 
