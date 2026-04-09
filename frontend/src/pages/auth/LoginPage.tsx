@@ -1,5 +1,6 @@
 import { useReducer, useRef } from "react";
 import type { CSSProperties, ChangeEvent, FormEvent } from "react";
+import { useLoginMutation } from "../../store/api/authApi";
 
 
 type AuthToastType = "" | "success" | "error";
@@ -235,6 +236,7 @@ function Toast({ message, type, visible }: LoginState["toast"]) {
 
 export default function LoginScreen() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [loginMutation] = useLoginMutation();
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function showToast(message: string, type: Exclude<AuthToastType, ""> = "success") {
@@ -271,7 +273,7 @@ export default function LoginScreen() {
     dispatch({ type: "SET_ERRORS", payload: { password: validatePassword(state.password) } });
   }
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const emailErr = validateEmail(state.email);
     const pwErr = validatePassword(state.password);
@@ -281,11 +283,28 @@ export default function LoginScreen() {
     if (emailErr || pwErr) return;
 
     dispatch({ type: "SET_LOADING", payload: true });
-    // Replace with real API call
-    setTimeout(() => {
+
+    try {
+      const response = await loginMutation({
+        email: state.email,
+        password: state.password,
+      }).unwrap();
+      localStorage.setItem("token", response.token);
+      localStorage.setItem("user", JSON.stringify(response.data));
+      showToast(response.message || "Signed in successfully!", "success");
+    } catch (error: unknown) {
+      const message =
+        typeof error === "object" &&
+        error !== null &&
+        "data" in error &&
+        typeof (error as { data?: { message?: string } }).data?.message === "string"
+          ? (error as { data: { message: string } }).data.message
+          : "Login failed. Please try again.";
+
+      showToast(message, "error");
+    } finally {
       dispatch({ type: "SET_LOADING", payload: false });
-      showToast("Signed in successfully!", "success");
-    }, 1800);
+    }
   }
 
   function handleGoogleLogin() {
@@ -321,7 +340,7 @@ export default function LoginScreen() {
           <GeometricBg />
           <div style={styles.sideContent}>
             <BrandMark />
-            <div style={styles.brandName}>NEXUS</div>
+            <div style={styles.brandName}>GetJob</div>
             <div style={styles.brandSub}>Enterprise Suite</div>
             <div style={styles.sideDivider} />
             <div style={styles.sideTagline}>
@@ -332,32 +351,33 @@ export default function LoginScreen() {
 
         {/* ── Form Panel ── */}
         <div style={styles.formArea}>
-          <Toast {...state.toast} />
+          <div style={styles.formContent}>
+            <Toast {...state.toast} />
 
-          <div style={styles.formTitle}>Welcome back</div>
-          <div style={styles.formSub}>Sign in to your account</div>
+            <div style={styles.formTitle}>Welcome back</div>
+            <div style={styles.formSub}>Sign in to your account</div>
 
           {/* Google Button */}
-          <button
-            style={{
-              ...styles.googleBtn,
-              ...(state.googleLoading ? styles.googleBtnLoading : {}),
-            }}
-            onClick={handleGoogleLogin}
-            disabled={state.googleLoading}
-          >
-            <GoogleIcon />
-            <span>{state.googleLoading ? "Connecting..." : "Continue with Google"}</span>
-          </button>
+            <button
+              style={{
+                ...styles.googleBtn,
+                ...(state.googleLoading ? styles.googleBtnLoading : {}),
+              }}
+              onClick={handleGoogleLogin}
+              disabled={state.googleLoading}
+            >
+              <GoogleIcon />
+              <span>{state.googleLoading ? "Connecting..." : "Continue with Google"}</span>
+            </button>
 
           {/* Divider */}
-          <div style={styles.divider}>
-            <div style={styles.divLine} />
-            <span style={styles.divText}>or</span>
-            <div style={styles.divLine} />
-          </div>
+            <div style={styles.divider}>
+              <div style={styles.divLine} />
+              <span style={styles.divText}>or</span>
+              <div style={styles.divLine} />
+            </div>
 
-          <form onSubmit={handleSubmit} noValidate>
+            <form onSubmit={handleSubmit} noValidate>
             {/* Email Field */}
             <div style={styles.field}>
               <div style={styles.fieldLabel}>
@@ -433,35 +453,36 @@ export default function LoginScreen() {
             </div>
 
             {/* Submit */}
-            <button
-              type="submit"
-              disabled={state.loading}
-              style={{
-                ...styles.submitBtn,
-                ...(state.loading ? styles.submitBtnDisabled : {}),
-              }}
-            >
-              {state.loading ? (
-                <div style={styles.btnInner}>
-                  <Spinner />
-                </div>
-              ) : (
-                <div style={styles.btnInner}>
-                  <ArrowIcon />
-                  <span>Sign In</span>
-                </div>
-              )}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={state.loading}
+                style={{
+                  ...styles.submitBtn,
+                  ...(state.loading ? styles.submitBtnDisabled : {}),
+                }}
+              >
+                {state.loading ? (
+                  <div style={styles.btnInner}>
+                    <Spinner />
+                  </div>
+                ) : (
+                  <div style={styles.btnInner}>
+                    <ArrowIcon />
+                    <span>Sign In</span>
+                  </div>
+                )}
+              </button>
+            </form>
 
-          <div style={styles.registerText}>
-            New to Nexus?{" "}
-            <span
-              style={styles.registerLink}
-              onClick={() => showToast("Redirecting to registration...", "success")}
-            >
-              Create an account
-            </span>
+            <div style={styles.registerText}>
+              New to Nexus?{" "}
+              <span
+                style={styles.registerLink}
+                onClick={() => showToast("Redirecting to registration...", "success")}
+              >
+                Create an account
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -476,7 +497,7 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     alignItems: "stretch",
     justifyContent: "stretch",
-    width: "100vw",
+    width: "100%",
     minHeight: "100vh",
     padding: 0,
     overflow: "hidden",
@@ -554,6 +575,12 @@ const styles: Record<string, CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+  },
+  formContent: {
+    width: "100%",
+    maxWidth: "420px",
     position: "relative",
   },
   formTitle: {
