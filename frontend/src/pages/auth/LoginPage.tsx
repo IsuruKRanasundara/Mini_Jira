@@ -1,798 +1,425 @@
-import { useReducer, useRef } from "react";
-import type { CSSProperties, ChangeEvent, FormEvent } from "react";
-import { useLoginMutation } from "../../store/api/authApi";
+import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { useLoginMutation } from '../../store/api/authApi';
+import { useTheme } from '../../context/ThemeContext';
+import './AuthPages.css';
 
+type ToastType = 'success' | 'error';
 
-type AuthToastType = "" | "success" | "error";
-
-type LoginState = {
-  email: string;
-  password: string;
-  emailTouched: boolean;
-  pwTouched: boolean;
-  loading: boolean;
-  googleLoading: boolean;
-  showPassword: boolean;
-  errors: {
-    email: string;
-    password: string;
-  };
-  toast: {
-    message: string;
-    type: AuthToastType;
-    visible: boolean;
-  };
+type FieldErrors = {
+  email?: string;
+  password?: string;
 };
 
-type LoginAction =
-  | { type: "SET_EMAIL"; payload: string }
-  | { type: "SET_PASSWORD"; payload: string }
-  | { type: "TOUCH_EMAIL" }
-  | { type: "TOUCH_PW" }
-  | { type: "SET_LOADING"; payload: boolean }
-  | { type: "SET_GOOGLE_LOADING"; payload: boolean }
-  | { type: "TOGGLE_PASSWORD" }
-  | { type: "SET_ERRORS"; payload: Partial<LoginState["errors"]> }
-  | { type: "SHOW_TOAST"; payload: { message: string; type: Exclude<AuthToastType, ""> } }
-  | { type: "HIDE_TOAST" };
+function validateEmail(value: string) {
+  if (!value.trim()) return 'Email is required';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Enter a valid email address';
+  return '';
+}
 
-const initialState: LoginState = {
-  email: "",
-  password: "",
-  emailTouched: false,
-  pwTouched: false,
-  loading: false,
-  googleLoading: false,
-  showPassword: false,
-  errors: { email: "", password: "" },
-  toast: { message: "", type: "", visible: false },
-};
+function validatePassword(value: string) {
+  if (!value) return 'Password is required';
+  if (value.length < 8) return 'Password should be at least 8 characters';
+  return '';
+}
 
-function reducer(state: LoginState, action: LoginAction): LoginState {
-  switch (action.type) {
-    case "SET_EMAIL":
-      return { ...state, email: action.payload };
-    case "SET_PASSWORD":
-      return { ...state, password: action.payload };
-    case "TOUCH_EMAIL":
-      return { ...state, emailTouched: true };
-    case "TOUCH_PW":
-      return { ...state, pwTouched: true };
-    case "SET_LOADING":
-      return { ...state, loading: action.payload };
-    case "SET_GOOGLE_LOADING":
-      return { ...state, googleLoading: action.payload };
-    case "TOGGLE_PASSWORD":
-      return { ...state, showPassword: !state.showPassword };
-    case "SET_ERRORS":
-      return { ...state, errors: { ...state.errors, ...action.payload } };
-    case "SHOW_TOAST":
-      return { ...state, toast: { message: action.payload.message, type: action.payload.type, visible: true } };
-    case "HIDE_TOAST":
-      return { ...state, toast: { ...state.toast, visible: false } };
-    default:
-      return state;
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
+  const [loginMutation] = useLoginMutation();
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<'google' | 'linkedin' | null>(null);
+  const [touched, setTouched] = useState({ email: false, password: false });
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2800);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const emailError = useMemo(() => validateEmail(email), [email]);
+  const passwordError = useMemo(() => validatePassword(password), [password]);
+  const canSubmit = !emailError && !passwordError && email.length > 0 && password.length > 0;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const nextErrors: FieldErrors = {
+      email: validateEmail(email),
+      password: validatePassword(password),
+    };
+
+    setTouched({ email: true, password: true });
+    setErrors(nextErrors);
+
+    if (nextErrors.email || nextErrors.password) return;
+
+    setLoading(true);
+    loginMutation({ email: email.trim(), password })
+      .unwrap()
+      .then((response) => {
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.data));
+        setToast({ message: response.message || 'Welcome back!', type: 'success' });
+        navigate('/dashboard');
+      })
+      .catch((error: unknown) => {
+        const message =
+          typeof error === 'object' &&
+          error !== null &&
+          'data' in error &&
+          typeof (error as { data?: { message?: string } }).data?.message === 'string'
+            ? (error as { data: { message: string } }).data.message
+            : 'Login failed. Please try again.';
+
+        setToast({ message, type: 'error' });
+      })
+      .finally(() => setLoading(false));
   }
-}
 
+  function handleSocial(provider: 'google' | 'linkedin') {
+    if (socialLoading) return;
+    setSocialLoading(provider);
 
-function validateEmail(value: string): string {
-  if (!value) return "Email is required";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return "Enter a valid email address";
-  return "";
-}
+    setTimeout(() => {
+      setSocialLoading(null);
+      setToast({
+        message: `${provider === 'google' ? 'Google' : 'LinkedIn'} sign-in is connected in UI. Backend OAuth can be added next.`,
+        type: 'success',
+      });
+    }, 1100);
+  }
 
-function validatePassword(value: string): string {
-  if (!value) return "Password is required";
-  if (value.length < 8) return "At least 8 characters required";
-  
-  return "";
-}
-
-function passwordStrength(value: string): number {
-  if (!value) return 0;
-  let score = 0;
-  if (value.length >= 8) score++;
-  if (/[A-Z]/.test(value)) score++;
-  if (/[0-9]/.test(value)) score++;
-  if (/[^A-Za-z0-9]/.test(value)) score++;
-  return score;
-}
-
-
-const EmailIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <rect x="1" y="3" width="14" height="10" rx="2" stroke="#A8B0C0" strokeWidth="1.2" />
-    <path d="M1 5l7 5 7-5" stroke="#A8B0C0" strokeWidth="1.2" />
-  </svg>
-);
-
-const LockIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <rect x="3" y="7" width="10" height="7" rx="1.5" stroke="#A8B0C0" strokeWidth="1.2" />
-    <path d="M5 7V5a3 3 0 1 1 6 0v2" stroke="#A8B0C0" strokeWidth="1.2" />
-    <circle cx="8" cy="10.5" r="1" fill="#A8B0C0" />
-  </svg>
-);
-
-function EyeIcon({ open }: { open: boolean }) {
-  return open ? (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path
-        d="M2 2l12 12M6.5 6.7A2.5 2.5 0 0 0 8 11a2.5 2.5 0 0 0 2.5-2.5M1 8s2.5-5 7-5c1 0 2 .2 2.8.6M15 8s-.9 1.8-2.8 3.2M4.3 4.5C2.3 5.8 1 8 1 8"
-        stroke="#A8B0C0"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  ) : (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-      <path d="M1 8s2.5-5 7-5 7 5 7 5-2.5 5-7 5-7-5-7-5z" stroke="#A8B0C0" strokeWidth="1.2" />
-      <circle cx="8" cy="8" r="2.5" stroke="#A8B0C0" strokeWidth="1.2" />
-    </svg>
-  );
-}
-
-const ArrowIcon = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-    <path d="M8 2l6 6-6 6M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const ErrorIcon = () => (
-  <svg width="12" height="12" viewBox="0 0 12 12">
-    <circle cx="6" cy="6" r="5.5" stroke="currentColor" />
-    <line x1="6" y1="4" x2="6" y2="6.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    <circle cx="6" cy="8.5" r="0.7" fill="currentColor" />
-  </svg>
-);
-
-const GoogleIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 18 18">
-    <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.48h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.013 17.64 11.705 17.64 9.2z" />
-    <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.185l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
-    <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" />
-    <path fill="#EA4335" d="M9 3.583c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.583 9 3.583z" />
-  </svg>
-);
-
-const BrandMark = () => (
-  <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
-    <polygon points="28,4 52,16 52,40 28,52 4,40 4,16" fill="#1E2330" stroke="#C9A84C" strokeWidth="1.2" />
-    <polygon points="28,12 44,20 44,36 28,44 12,36 12,20" fill="none" stroke="#C9A84C" strokeWidth="0.7" opacity="0.6" />
-    <circle cx="28" cy="28" r="7" fill="#C9A84C" opacity="0.9" />
-    <line x1="28" y1="14" x2="28" y2="21" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5" />
-    <line x1="28" y1="35" x2="28" y2="42" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5" />
-    <line x1="14" y1="28" x2="21" y2="28" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5" />
-    <line x1="35" y1="28" x2="42" y2="28" stroke="#C9A84C" strokeWidth="1.5" opacity="0.5" />
-  </svg>
-);
-
-const GeometricBg = () => (
-  <svg style={styles.geoBg} viewBox="0 0 240 520" xmlns="http://www.w3.org/2000/svg">
-    <defs>
-      <pattern id="hex" width="40" height="46" patternUnits="userSpaceOnUse">
-        <polygon points="20,2 38,12 38,34 20,44 2,34 2,12" fill="none" stroke="#C9A84C" strokeWidth="0.8" />
-      </pattern>
-    </defs>
-    <rect width="240" height="520" fill="url(#hex)" />
-    <circle cx="120" cy="260" r="90" fill="none" stroke="#C9A84C" strokeWidth="0.5" />
-    <circle cx="120" cy="260" r="60" fill="none" stroke="#C9A84C" strokeWidth="0.3" />
-    <line x1="0" y1="260" x2="240" y2="260" stroke="#C9A84C" strokeWidth="0.4" />
-    <line x1="120" y1="0" x2="120" y2="520" stroke="#C9A84C" strokeWidth="0.4" />
-  </svg>
-);
-
-
-const strengthLabels = ["", "Weak", "Fair", "Strong", "Very strong"];
-const strengthColors = ["", "#E05252", "#E08A2A", "#D4B430", "#3DBE8A"];
-
-function StrengthBar({ password }: { password: string }) {
-  const score = passwordStrength(password);
   return (
-    <div>
-      <div style={styles.strengthBar}>
-        {[1, 2, 3, 4].map((i) => (
-          <div
-            key={i}
-            style={{
-              ...styles.strengthSeg,
-              background: i <= score ? strengthColors[score] : "rgba(255,255,255,0.07)",
-            }}
-          />
-        ))}
+    <div className="auth-shell">
+      <div className="auth-glow auth-glow-a" aria-hidden="true" />
+      <div className="auth-glow auth-glow-b" aria-hidden="true" />
+      <div className="auth-glow auth-glow-c" aria-hidden="true" />
+
+      <button
+        type="button"
+        className="auth-theme-toggle"
+        onClick={toggleTheme}
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      >
+        {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+        <span className="text-sm font-semibold">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+      </button>
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl items-center px-4 py-12 sm:px-6 lg:px-8">
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, ease: 'easeOut' }}
+          className="auth-card grid w-full overflow-hidden lg:grid-cols-[1.05fr_0.95fr]"
+        >
+          <section className="p-6 sm:p-10">
+            <div className="mb-8 flex items-center justify-between">
+              <Link to="/landing" className="inline-flex items-center gap-3 text-inherit no-underline">
+                <span className="auth-brand-icon">SJ</span>
+                <span>
+                  <strong className="block text-base">SmartHire Jira</strong>
+                  <small className="auth-helper text-xs">AI job matching workspace</small>
+                </span>
+              </Link>
+              <span className="auth-pill px-3 py-1 text-xs font-semibold">Secure login</span>
+            </div>
+
+            <h1 className="text-4xl font-bold tracking-tight md:text-5xl">Welcome Back</h1>
+            <p className="auth-helper mt-3 max-w-md text-sm leading-7 md:text-base">
+              Continue to your personalized job dashboard, recommendations, and application board.
+            </p>
+
+            <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-4">
+              <div>
+                <label htmlFor="email" className="mb-2 block text-sm font-semibold">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setEmail(value);
+                    if (touched.email) {
+                      setErrors((current) => ({ ...current, email: validateEmail(value) }));
+                    }
+                  }}
+                  onBlur={() => {
+                    setTouched((current) => ({ ...current, email: true }));
+                    setErrors((current) => ({ ...current, email: validateEmail(email) }));
+                  }}
+                  placeholder="you@company.com"
+                  className={`auth-input w-full rounded-xl px-4 py-3 text-sm outline-none ${
+                    touched.email && errors.email ? 'auth-input-error' : ''
+                  } ${email && !emailError ? 'auth-input-valid' : ''}`}
+                />
+                {touched.email && errors.email && (
+                  <p className="mt-2 text-sm text-red-500" role="alert">
+                    {errors.email}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label htmlFor="password" className="block text-sm font-semibold">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    className="auth-link text-xs font-semibold"
+                    onClick={() => setToast({ message: 'Password reset flow can be linked next.', type: 'success' })}
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setPassword(value);
+                      if (touched.password) {
+                        setErrors((current) => ({ ...current, password: validatePassword(value) }));
+                      }
+                    }}
+                    onBlur={() => {
+                      setTouched((current) => ({ ...current, password: true }));
+                      setErrors((current) => ({ ...current, password: validatePassword(password) }));
+                    }}
+                    placeholder="At least 8 characters"
+                    className={`auth-input w-full rounded-xl px-4 py-3 pr-11 text-sm outline-none ${
+                      touched.password && errors.password ? 'auth-input-error' : ''
+                    } ${password && !passwordError ? 'auth-input-valid' : ''}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-200"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
+
+                {touched.password && errors.password && (
+                  <p className="mt-2 text-sm text-red-500" role="alert">
+                    {errors.password}
+                  </p>
+                )}
+              </div>
+
+              <motion.button
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
+                type="submit"
+                disabled={loading || !canSubmit}
+                className="auth-primary-btn mt-2 inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold"
+              >
+                {loading ? 'Logging in...' : 'Login'}
+              </motion.button>
+
+              <div className="auth-divider py-2 text-xs uppercase tracking-[0.22em]">
+                <span>or</span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <motion.button
+                  whileHover={{ y: -2 }}
+                  type="button"
+                  className="auth-social-btn inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold"
+                  disabled={socialLoading !== null}
+                  onClick={() => handleSocial('google')}
+                >
+                  <GoogleIcon />
+                  {socialLoading === 'google' ? 'Connecting...' : 'Google'}
+                </motion.button>
+
+                <motion.button
+                  whileHover={{ y: -2 }}
+                  type="button"
+                  className="auth-social-btn inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold"
+                  disabled={socialLoading !== null}
+                  onClick={() => handleSocial('linkedin')}
+                >
+                  <LinkedInIcon />
+                  {socialLoading === 'linkedin' ? 'Connecting...' : 'LinkedIn'}
+                </motion.button>
+              </div>
+            </form>
+
+            <p className="auth-helper mt-6 text-sm">
+              Don't have an account?{' '}
+              <Link to="/register" className="auth-link font-semibold">
+                Sign up
+              </Link>
+            </p>
+          </section>
+
+          <motion.aside
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, ease: 'easeOut' }}
+            className="hidden border-l border-[var(--lp-border)] p-8 lg:block"
+          >
+            <div className="auth-illustration-box h-full rounded-3xl p-6">
+              <div className="mb-4">
+                <p className="auth-helper text-xs uppercase tracking-[0.2em]">Security + AI pipeline</p>
+                <h2 className="mt-2 text-2xl font-bold">Protected access to your match workspace</h2>
+              </div>
+
+              <SecurityIllustration />
+
+              <div className="mt-5 space-y-3">
+                <div className="auth-card rounded-xl p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--lp-accent)]">Signal</p>
+                  <p className="auth-helper mt-1 text-sm">3 new job recommendations based on your updated CV profile.</p>
+                </div>
+                <div className="auth-card rounded-xl p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--lp-accent)]">Reminder</p>
+                  <p className="auth-helper mt-1 text-sm">1 interview follow-up due today in your Interview column.</p>
+                </div>
+              </div>
+            </div>
+          </motion.aside>
+        </motion.div>
       </div>
-      {password && (
-        <div style={styles.strengthHint}>
-          {strengthLabels[score]}
-        </div>
+
+      {toast && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          className={`auth-toast fixed left-1/2 top-4 z-[60] -translate-x-1/2 px-4 py-2 text-sm font-medium ${
+            toast.type === 'success' ? 'auth-toast-success' : 'auth-toast-error'
+          }`}
+        >
+          {toast.message}
+        </motion.div>
       )}
     </div>
   );
 }
 
-
-const Spinner = () => (
-  <div style={styles.spinner} />
-);
-
-
-function Toast({ message, type, visible }: LoginState["toast"]) {
+function SecurityIllustration() {
   return (
-    <div
-      style={{
-        ...styles.toast,
-        ...(type === "error" ? styles.toastError : styles.toastSuccess),
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateX(-50%) translateY(0)" : "translateX(-50%) translateY(-8px)",
-      }}
-    >
-      {message}
-    </div>
-  );
-}
+    <svg className="h-auto w-full" viewBox="0 0 520 360" role="img" aria-label="Login security illustration">
+      <defs>
+        <linearGradient id="login-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#0ea5e9" stopOpacity="0.24" />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.22" />
+        </linearGradient>
+      </defs>
+      <rect x="12" y="12" width="496" height="336" rx="24" fill="url(#login-bg)" stroke="rgba(255,255,255,0.15)" />
 
+      <g className="auth-orbit">
+        <circle cx="85" cy="84" r="8" fill="#67e8f9" />
+        <circle cx="432" cy="72" r="7" fill="#a78bfa" />
+        <circle cx="446" cy="278" r="9" fill="#22c55e" />
+      </g>
 
-export default function LoginScreen() {
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const [loginMutation] = useLoginMutation();
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+      <g className="auth-wave">
+        <rect x="64" y="78" width="156" height="108" rx="18" fill="rgba(15,23,42,0.84)" />
+        <rect x="82" y="100" width="74" height="10" rx="5" fill="#67e8f9" />
+        <rect x="82" y="121" width="118" height="8" rx="4" fill="#475569" />
+        <rect x="82" y="137" width="94" height="8" rx="4" fill="#334155" />
+      </g>
 
-  function showToast(message: string, type: Exclude<AuthToastType, ""> = "success") {
-    dispatch({ type: "SHOW_TOAST", payload: { message, type } });
-    if (toastTimer.current) {
-      clearTimeout(toastTimer.current);
-    }
-    toastTimer.current = setTimeout(() => dispatch({ type: "HIDE_TOAST" }), 2800);
-  }
+      <g>
+        <rect x="194" y="136" width="130" height="108" rx="18" fill="rgba(255,255,255,0.9)" />
+        <rect x="228" y="164" width="64" height="45" rx="10" fill="#0f172a" />
+        <path d="M240 164v-10a20 20 0 0 1 40 0v10" fill="none" stroke="#94a3b8" strokeWidth="5" />
+        <circle cx="260" cy="186" r="7" fill="#67e8f9" />
+      </g>
 
-  function handleEmailChange(e: ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    dispatch({ type: "SET_EMAIL", payload: value });
-    if (state.emailTouched) {
-      dispatch({ type: "SET_ERRORS", payload: { email: validateEmail(value) } });
-    }
-  }
+      <g className="auth-grid-pulse">
+        <rect x="348" y="102" width="118" height="166" rx="18" fill="rgba(15,23,42,0.88)" />
+        <rect x="366" y="124" width="72" height="10" rx="5" fill="#a78bfa" />
+        <rect x="366" y="146" width="84" height="8" rx="4" fill="#475569" />
+        <rect x="366" y="165" width="66" height="8" rx="4" fill="#334155" />
+        <rect x="366" y="188" width="86" height="28" rx="14" fill="rgba(167,139,250,0.18)" />
+      </g>
 
-  function handleEmailBlur() {
-    dispatch({ type: "TOUCH_EMAIL" });
-    dispatch({ type: "SET_ERRORS", payload: { email: validateEmail(state.email) } });
-  }
-
-  function handlePasswordChange(e: ChangeEvent<HTMLInputElement>) {
-    const value = e.target.value;
-    dispatch({ type: "SET_PASSWORD", payload: value });
-    if (state.pwTouched) {
-      dispatch({ type: "SET_ERRORS", payload: { password: validatePassword(value) } });
-    }
-  }
-
-  function handlePasswordBlur() {
-    dispatch({ type: "TOUCH_PW" });
-    dispatch({ type: "SET_ERRORS", payload: { password: validatePassword(state.password) } });
-  }
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const emailErr = validateEmail(state.email);
-    const pwErr = validatePassword(state.password);
-    dispatch({ type: "TOUCH_EMAIL" });
-    dispatch({ type: "TOUCH_PW" });
-    dispatch({ type: "SET_ERRORS", payload: { email: emailErr, password: pwErr } });
-    if (emailErr || pwErr) return;
-
-    dispatch({ type: "SET_LOADING", payload: true });
-
-    try {
-      const response = await loginMutation({
-        email: state.email,
-        password: state.password,
-      }).unwrap();
-      localStorage.setItem("token", response.token);
-      localStorage.setItem("user", JSON.stringify(response.data));
-      showToast(response.message || "Signed in successfully!", "success");
-    } catch (error: unknown) {
-      const message =
-        typeof error === "object" &&
-        error !== null &&
-        "data" in error &&
-        typeof (error as { data?: { message?: string } }).data?.message === "string"
-          ? (error as { data: { message: string } }).data.message
-          : "Login failed. Please try again.";
-
-      showToast(message, "error");
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  }
-
-  function handleGoogleLogin() {
-    if (state.googleLoading) return;
-    dispatch({ type: "SET_GOOGLE_LOADING", payload: true });
-    // Replace with real Google OAuth flow
-    setTimeout(() => {
-      dispatch({ type: "SET_GOOGLE_LOADING", payload: false });
-      showToast("Google sign-in successful!", "success");
-    }, 1600);
-  }
-
-  const emailValid = Boolean(state.email) && !validateEmail(state.email);
-  const pwValid = Boolean(state.password) && !validatePassword(state.password);
-
-  return (
-    <div style={styles.page}>
-      <link
-        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=DM+Sans:wght@300;400;500&display=swap"
-        rel="stylesheet"
+      <path
+        d="M82 266c52 18 108 18 164 0s108-18 164 0"
+        fill="none"
+        stroke="#7dd3fc"
+        strokeWidth="4"
+        strokeLinecap="round"
+        strokeDasharray="6 9"
       />
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input:-webkit-autofill {
-          -webkit-box-shadow: 0 0 0 1000px #1E2330 inset !important;
-          -webkit-text-fill-color: #E8E0D0 !important;
-        }
-      `}</style>
-
-      <div style={styles.card}>
-        {/* ── Side Panel ── */}
-        <div style={styles.side}>
-          <GeometricBg />
-          <div style={styles.sideContent}>
-            <BrandMark />
-            <div style={styles.brandName}>GetJob</div>
-            <div style={styles.brandSub}>Enterprise Suite</div>
-            <div style={styles.sideDivider} />
-            <div style={styles.sideTagline}>
-              Secure access to your<br />enterprise workspace
-            </div>
-          </div>
-        </div>
-
-        {/* ── Form Panel ── */}
-        <div style={styles.formArea}>
-          <div style={styles.formContent}>
-            <Toast {...state.toast} />
-
-            <div style={styles.formTitle}>Welcome back</div>
-            <div style={styles.formSub}>Sign in to your account</div>
-
-          {/* Google Button */}
-            <button
-              style={{
-                ...styles.googleBtn,
-                ...(state.googleLoading ? styles.googleBtnLoading : {}),
-              }}
-              onClick={handleGoogleLogin}
-              disabled={state.googleLoading}
-            >
-              <GoogleIcon />
-              <span>{state.googleLoading ? "Connecting..." : "Continue with Google"}</span>
-            </button>
-
-          {/* Divider */}
-            <div style={styles.divider}>
-              <div style={styles.divLine} />
-              <span style={styles.divText}>or</span>
-              <div style={styles.divLine} />
-            </div>
-
-            <form onSubmit={handleSubmit} noValidate>
-            {/* Email Field */}
-            <div style={styles.field}>
-              <div style={styles.fieldLabel}>
-                <span>Email address</span>
-              </div>
-              <div style={styles.inputWrap}>
-                <span style={styles.inputIconLeft}><EmailIcon /></span>
-                <input
-                  type="email"
-                  value={state.email}
-                  onChange={handleEmailChange}
-                  onBlur={handleEmailBlur}
-                  placeholder="you@company.com"
-                  style={{
-                    ...styles.input,
-                    ...(state.errors.email && state.emailTouched ? styles.inputError : {}),
-                    ...(emailValid ? styles.inputValid : {}),
-                  }}
-                  autoComplete="email"
-                />
-              </div>
-              {state.errors.email && state.emailTouched && (
-                <div style={styles.fieldErr}>
-                  <ErrorIcon />
-                  <span>{state.errors.email}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Password Field */}
-            <div style={styles.field}>
-              <div style={styles.fieldLabel}>
-                <span>Password</span>
-                <button
-                  type="button"
-                  style={styles.forgotBtn}
-                  onClick={() => showToast("Password reset link sent!", "success")}
-                >
-                  Forgot?
-                </button>
-              </div>
-              <div style={styles.inputWrap}>
-                <span style={styles.inputIconLeft}><LockIcon /></span>
-                <input
-                  type={state.showPassword ? "text" : "password"}
-                  value={state.password}
-                  onChange={handlePasswordChange}
-                  onBlur={handlePasswordBlur}
-                  placeholder="Min. 8 characters"
-                  style={{
-                    ...styles.input,
-                    ...(state.errors.password && state.pwTouched ? styles.inputError : {}),
-                    ...(pwValid ? styles.inputValid : {}),
-                  }}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  style={styles.eyeBtn}
-                  onClick={() => dispatch({ type: "TOGGLE_PASSWORD" })}
-                  aria-label="Toggle password visibility"
-                >
-                  <EyeIcon open={state.showPassword} />
-                </button>
-              </div>
-              <StrengthBar password={state.password} />
-              {state.errors.password && state.pwTouched && (
-                <div style={styles.fieldErr}>
-                  <ErrorIcon />
-                  <span>{state.errors.password}</span>
-                </div>
-              )}
-            </div>
-
-            {/* Submit */}
-              <button
-                type="submit"
-                disabled={state.loading}
-                style={{
-                  ...styles.submitBtn,
-                  ...(state.loading ? styles.submitBtnDisabled : {}),
-                }}
-              >
-                {state.loading ? (
-                  <div style={styles.btnInner}>
-                    <Spinner />
-                  </div>
-                ) : (
-                  <div style={styles.btnInner}>
-                    <ArrowIcon />
-                    <span>Sign In</span>
-                  </div>
-                )}
-              </button>
-            </form>
-
-            <div style={styles.registerText}>
-              New to Nexus?{" "}
-              <span
-                style={styles.registerLink}
-                onClick={() => showToast("Redirecting to registration...", "success")}
-              >
-                Create an account
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    </svg>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M21 12.8A8.5 8.5 0 0 1 11.2 3a9 9 0 1 0 9.8 9.8Z" />
+    </svg>
+  );
+}
 
-const styles: Record<string, CSSProperties> = {
-  page: {
-    display: "flex",
-    alignItems: "stretch",
-    justifyContent: "stretch",
-    width: "100%",
-    minHeight: "100vh",
-    padding: 0,
-    overflow: "hidden",
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  card: {
-    display: "flex",
-    width: "100%",
-    maxWidth: "none",
-    minHeight: "100vh",
-    borderRadius: "0",
-    overflow: "hidden",
-    background: "#0D0F14",
-    border: "none",
-  },
-  side: {
-    width: "min(36vw, 420px)",
-    flexShrink: 0,
-    background: "#161A23",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "2rem 1.5rem",
-    position: "relative",
-    overflow: "hidden",
-    borderRight: "1px solid rgba(201,168,76,0.12)",
-  },
-  geoBg: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
-    opacity: 0.07,
-    pointerEvents: "none",
-  },
-  sideContent: {
-    position: "relative",
-    zIndex: 2,
-    textAlign: "center",
-  },
-  brandName: {
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: "22px",
-    fontWeight: 600,
-    color: "#E8C97A",
-    letterSpacing: "0.08em",
-    lineHeight: 1.2,
-    marginTop: "1.25rem",
-  },
-  brandSub: {
-    fontSize: "11px",
-    color: "#6B7280",
-    letterSpacing: "0.18em",
-    textTransform: "uppercase",
-    marginTop: "6px",
-  },
-  sideDivider: {
-    width: "40px",
-    height: "1px",
-    background: "linear-gradient(90deg, transparent, #8A6E2F, transparent)",
-    margin: "1.5rem auto",
-  },
-  sideTagline: {
-    fontSize: "12px",
-    color: "#A8B0C0",
-    lineHeight: 1.7,
-    textAlign: "center",
-    opacity: 0.75,
-  },
-  formArea: {
-    flex: 1,
-    padding: "2.5rem 2rem",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
-  formContent: {
-    width: "100%",
-    maxWidth: "420px",
-    position: "relative",
-  },
-  formTitle: {
-    fontFamily: "'Cormorant Garamond', serif",
-    fontSize: "28px",
-    fontWeight: 600,
-    color: "#F0EAD6",
-    letterSpacing: "0.02em",
-    marginBottom: "4px",
-  },
-  formSub: {
-    fontSize: "13px",
-    color: "#6B7280",
-    marginBottom: "1.75rem",
-  },
-  googleBtn: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "10px",
-    width: "100%",
-    padding: "11px",
-    background: "#1E2330",
-    border: "1px solid rgba(201,168,76,0.25)",
-    borderRadius: "12px",
-    cursor: "pointer",
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: "13.5px",
-    color: "#A8B0C0",
-    fontWeight: 500,
-    transition: "all 0.2s",
-    letterSpacing: "0.01em",
-    marginBottom: "1.5rem",
-  },
-  googleBtnLoading: {
-    opacity: 0.6,
-    cursor: "not-allowed",
-  },
-  divider: {
-    display: "flex",
-    alignItems: "center",
-    gap: "12px",
-    marginBottom: "1.25rem",
-  },
-  divLine: {
-    flex: 1,
-    height: "1px",
-    background: "rgba(255,255,255,0.07)",
-  },
-  divText: {
-    fontSize: "11px",
-    color: "#6B7280",
-    letterSpacing: "0.1em",
-    textTransform: "uppercase",
-  },
-  field: {
-    marginBottom: "1.1rem",
-  },
-  fieldLabel: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    fontSize: "11.5px",
-    fontWeight: 500,
-    color: "#A8B0C0",
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-    marginBottom: "7px",
-  },
-  inputWrap: {
-    position: "relative",
-  },
-  inputIconLeft: {
-    position: "absolute",
-    left: "13px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    opacity: 0.6,
-    pointerEvents: "none",
-    display: "flex",
-    alignItems: "center",
-  },
-  input: {
-    width: "100%",
-    background: "#1E2330",
-    border: "1px solid rgba(255,255,255,0.09)",
-    borderRadius: "12px",
-    padding: "11px 42px 11px 40px",
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: "13.5px",
-    color: "#E8E0D0",
-    outline: "none",
-    caretColor: "#C9A84C",
-  },
-  inputError: {
-    borderColor: "rgba(224,82,82,0.6)",
-    background: "#1A1519",
-  },
-  inputValid: {
-    borderColor: "rgba(61,190,138,0.4)",
-  },
-  eyeBtn: {
-    position: "absolute",
-    right: "13px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    cursor: "pointer",
-    opacity: 0.4,
-    background: "none",
-    border: "none",
-    padding: "2px",
-    display: "flex",
-    alignItems: "center",
-  },
-  forgotBtn: {
-    fontSize: "12px",
-    color: "#8A6E2F",
-    cursor: "pointer",
-    background: "none",
-    border: "none",
-    fontFamily: "'DM Sans', sans-serif",
-    padding: 0,
-  },
-  fieldErr: {
-    display: "flex",
-    alignItems: "center",
-    gap: "5px",
-    fontSize: "11.5px",
-    color: "#E05252",
-    marginTop: "6px",
-  },
-  strengthBar: {
-    display: "flex",
-    gap: "3px",
-    marginTop: "7px",
-  },
-  strengthSeg: {
-    flex: 1,
-    height: "3px",
-    borderRadius: "2px",
-    transition: "background 0.3s",
-  },
-  strengthHint: {
-    fontSize: "11px",
-    color: "#6B7280",
-    marginTop: "5px",
-  },
-  submitBtn: {
-    width: "100%",
-    padding: "12.5px",
-    background: "#C9A84C",
-    border: "none",
-    borderRadius: "12px",
-    fontFamily: "'DM Sans', sans-serif",
-    fontSize: "14px",
-    fontWeight: 500,
-    color: "#0D0F14",
-    cursor: "pointer",
-    transition: "all 0.2s",
-    letterSpacing: "0.04em",
-    marginTop: "0.25rem",
-  },
-  submitBtnDisabled: {
-    background: "#3A3420",
-    color: "#6B5E30",
-    cursor: "not-allowed",
-  },
-  btnInner: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-  },
-  spinner: {
-    width: "16px",
-    height: "16px",
-    border: "2px solid rgba(0,0,0,0.2)",
-    borderTopColor: "#0D0F14",
-    borderRadius: "50%",
-    animation: "spin 0.7s linear infinite",
-  },
-  registerText: {
-    textAlign: "center",
-    marginTop: "1.25rem",
-    fontSize: "12.5px",
-    color: "#6B7280",
-  },
-  registerLink: {
-    color: "#C9A84C",
-    cursor: "pointer",
-    fontWeight: 500,
-  },
-  toast: {
-    position: "absolute",
-    top: "16px",
-    left: "50%",
-    transform: "translateX(-50%)",
-    borderRadius: "10px",
-    padding: "10px 18px",
-    fontSize: "13px",
-    pointerEvents: "none",
-    transition: "all 0.3s",
-    whiteSpace: "nowrap",
-    zIndex: 10,
-  },
-  toastSuccess: {
-    background: "#1C2D24",
-    border: "1px solid rgba(61,190,138,0.4)",
-    color: "#3DBE8A",
-  },
-  toastError: {
-    background: "#2D1C1C",
-    border: "1px solid rgba(224,82,82,0.4)",
-    color: "#E05252",
-  },
-};
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1" />
+    </svg>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M3 3 21 21" />
+      <path d="M10.6 10.7A3 3 0 0 0 13.3 13.4" />
+      <path d="M9.1 5.1A11.1 11.1 0 0 1 12 5c6.5 0 10 7 10 7a18.5 18.5 0 0 1-3.2 4.3" />
+      <path d="M6.2 6.3A18.7 18.7 0 0 0 2 12s3.5 7 10 7a10.8 10.8 0 0 0 4.2-.8" />
+    </svg>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.48h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.013 17.64 11.705 17.64 9.2z" />
+      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.185l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" />
+      <path fill="#FBBC05" d="M3.964 10.706A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" />
+      <path fill="#EA4335" d="M9 3.583c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.962L3.964 7.294C4.672 5.163 6.656 3.583 9 3.583z" />
+    </svg>
+  );
+}
+
+function LinkedInIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2.2" y="2.2" width="19.6" height="19.6" rx="3.5" fill="#0a66c2" />
+      <path fill="#fff" d="M8.1 9.1H5.8v9h2.3v-9Zm-1.2-1a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6Zm11.3 4.6c0-2.8-1.5-4.1-3.5-4.1-1.6 0-2.3.9-2.7 1.5v-1.3H9.7v9h2.3v-5c0-1.3.2-2.6 1.8-2.6 1.6 0 1.6 1.5 1.6 2.6v5h2.3v-5.4Z" />
+    </svg>
+  );
+}
