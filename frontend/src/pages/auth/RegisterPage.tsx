@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { DragEvent, FormEvent } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
@@ -73,9 +73,7 @@ export default function RegisterPage() {
   const [errors, setErrors] = useState<RegisterErrors>({});
   const [touched, setTouched] = useState({ fullName: false, email: false, password: false, confirmPassword: false });
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const [cvFile, setCvFile] = useState<File | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+ 
 
   useEffect(() => {
     if (!toast) return;
@@ -100,45 +98,11 @@ export default function RegisterPage() {
   const canSubmit =
     !fullNameError && !emailError && !passwordError && !confirmPasswordError && fullName && email && password;
 
-  useEffect(() => {
-    if (!cvFile) {
-      setUploadProgress(0);
-      return;
-    }
+  
 
-    setUploadProgress(0);
-    const interval = setInterval(() => {
-      setUploadProgress((current) => {
-        const next = current + 14;
-        if (next >= 100) {
-          clearInterval(interval);
-          return 100;
-        }
-        return next;
-      });
-    }, 110);
+  
 
-    return () => clearInterval(interval);
-  }, [cvFile]);
-
-  function onSelectFile(file: File | null) {
-    if (!file) return;
-
-    const allowed = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    if (!allowed.includes(file.type)) {
-      setToast({ message: 'Please upload a PDF or Word document for CV parsing.', type: 'error' });
-      return;
-    }
-
-    setCvFile(file);
-  }
-
-  function onDrop(event: DragEvent<HTMLLabelElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDragging(false);
-    onSelectFile(event.dataTransfer.files?.[0] ?? null);
-  }
+  
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -424,68 +388,7 @@ export default function RegisterPage() {
                 </div>
               </div>
 
-              <div>
-                <div className="mb-2 flex items-center gap-2">
-                  <label className="text-sm font-semibold" htmlFor="cv-upload">
-                    Upload CV (optional)
-                  </label>
-                  <span
-                    tabIndex={0}
-                    className="auth-tooltip"
-                    data-tip="Uploading your CV helps SmartHire Jira generate better skill-based matches and profile suggestions."
-                  >
-                    i
-                  </span>
-                </div>
-
-                <label
-                  htmlFor="cv-upload"
-                  className={`auth-upload-zone block cursor-pointer rounded-xl px-4 py-4 text-center ${isDragging ? 'drag-over' : ''}`}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    setIsDragging(true);
-                  }}
-                  onDragLeave={() => setIsDragging(false)}
-                  onDrop={onDrop}
-                >
-                  <input
-                    id="cv-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    className="hidden"
-                    onChange={(event) => onSelectFile(event.target.files?.[0] ?? null)}
-                  />
-                  <p className="text-sm font-semibold">Drag and drop your CV here, or click to browse</p>
-                  <p className="auth-helper mt-1 text-xs">Accepted formats: PDF, DOC, DOCX</p>
-                </label>
-
-                {cvFile && (
-                  <div className="auth-card mt-3 rounded-xl p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{cvFile.name}</p>
-                        <p className="auth-helper text-xs">{Math.ceil(cvFile.size / 1024)} KB</p>
-                      </div>
-                      <button
-                        type="button"
-                        className="auth-link text-xs font-semibold"
-                        onClick={() => setCvFile(null)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="auth-progress-track mt-2">
-                      <motion.div
-                        className="auth-progress-fill"
-                        initial={{ width: '0%' }}
-                        animate={{ width: `${uploadProgress}%` }}
-                        transition={{ duration: 0.2 }}
-                      />
-                    </div>
-                    <p className="auth-helper mt-1 text-xs">Upload progress: {uploadProgress}%</p>
-                  </div>
-                )}
-              </div>
+             
 
               <motion.button
                 whileHover={{ scale: 1.01 }}
