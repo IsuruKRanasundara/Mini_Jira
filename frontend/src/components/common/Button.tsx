@@ -4,7 +4,12 @@ import { motion } from 'framer-motion';
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'outline';
 type ButtonSize = 'sm' | 'md' | 'lg';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+type NativeButtonProps = Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'onAnimationStart' | 'onAnimationEnd' | 'onDrag' | 'onDragStart' | 'onDragEnd'
+>;
+
+interface ButtonProps extends NativeButtonProps {
   variant?: ButtonVariant;
   size?: ButtonSize;
   isLoading?: boolean;

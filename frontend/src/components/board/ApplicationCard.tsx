@@ -32,39 +32,42 @@ const JobApplicationCard: React.FC<JobApplicationCardProps> = ({
   const status = statusConfig[card.status];
 
   return (
-    <motion.div
+    <div
       draggable
       onDragStart={(e) => onDragStart?.(e, card.id)}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.2 }}
     >
-      <Card hoverable clickable onClick={onClick} className="cursor-grab active:cursor-grabbing">
-        <div className="flex gap-4">
-          {/* Company Logo */}
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-            {card.companyLogo || card.companyName.charAt(0).toUpperCase()}
-          </div>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -10 }}
+        transition={{ duration: 0.2 }}
+      >
+        <Card hoverable clickable onClick={onClick} className="cursor-grab active:cursor-grabbing">
+          <div className="flex gap-4">
+            {/* Company Logo */}
+            <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+              {card.companyLogo || card.companyName.charAt(0).toUpperCase()}
+            </div>
 
-          {/* Content */}
-          <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-              {card.jobTitle}
-            </h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">{card.companyName}</p>
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-gray-500 dark:text-gray-500">
-                {new Date(card.appliedDate).toLocaleDateString()}
-              </span>
-              <Badge variant={status.color as 'primary' | 'success' | 'warning' | 'error' | 'info' | 'neutral'} size="sm" icon={status.icon}>
-                {status.label}
-              </Badge>
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                {card.jobTitle}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{card.companyName}</p>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs text-gray-500 dark:text-gray-500">
+                  {new Date(card.appliedDate).toLocaleDateString()}
+                </span>
+                <Badge variant={status.color as 'primary' | 'success' | 'warning' | 'error' | 'info' | 'neutral'} size="sm" icon={status.icon}>
+                  {status.label}
+                </Badge>
+              </div>
             </div>
           </div>
-        </div>
-      </Card>
-    </motion.div>
+        </Card>
+      </motion.div>
+    </div>
   );
 };
 
