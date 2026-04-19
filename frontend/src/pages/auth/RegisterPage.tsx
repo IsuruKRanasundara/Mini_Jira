@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { useRegisterMutation, type RegisterResponse } from '../../store/api/authApi';
 import { useTheme } from '../../context/ThemeContext';
+import { startOAuthLogin } from '../../services/oauthService';
 import './AuthPages.css';
 
 type ToastType = 'success' | 'error';
@@ -53,6 +54,8 @@ function splitName(fullName: string) {
   const [firstName, ...rest] = clean.split(' ');
   return { firstName, lastName: rest.join(' ') || '-' };
 }
+
+const REDIRECT_DELAY_MS = 600;
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -168,7 +171,7 @@ export default function RegisterPage() {
       .unwrap()
       .then((result: RegisterResponse) => {
         setToast({ message: result.message || 'Account created successfully.', type: 'success' });
-        setTimeout(() => navigate('/login'), 700);
+        window.setTimeout(() => navigate('/login'), REDIRECT_DELAY_MS);
       })
       .catch((error: unknown) => {
         if (axios.isAxiosError<{ message?: string }>(error)) {
@@ -182,15 +185,20 @@ export default function RegisterPage() {
 
   function handleSocial(provider: 'google' | 'linkedin') {
     if (socialLoading) return;
-    setSocialLoading(provider);
 
-    setTimeout(() => {
+    try {
+      setSocialLoading(provider);
+      startOAuthLogin(provider);
+    } catch (error) {
       setSocialLoading(null);
       setToast({
-        message: `${provider === 'google' ? 'Google' : 'LinkedIn'} signup UI is ready. OAuth can be wired to backend next.`,
-        type: 'success',
+        message:
+          error instanceof Error
+            ? error.message
+            : `${provider === 'google' ? 'Google' : 'LinkedIn'} auth is not configured.`,
+        type: 'error',
       });
-    }, 1100);
+    }
   }
 
   return (
@@ -502,7 +510,7 @@ export default function RegisterPage() {
                   onClick={() => handleSocial('google')}
                 >
                   <GoogleIcon />
-                  {socialLoading === 'google' ? 'Connecting...' : 'Google'}
+                  {socialLoading === 'google' ? 'Redirecting...' : 'Google'}
                 </motion.button>
 
                 <motion.button
@@ -513,14 +521,21 @@ export default function RegisterPage() {
                   onClick={() => handleSocial('linkedin')}
                 >
                   <LinkedInIcon />
-                  {socialLoading === 'linkedin' ? 'Connecting...' : 'LinkedIn'}
+                  {socialLoading === 'linkedin' ? 'Redirecting...' : 'LinkedIn'}
                 </motion.button>
               </div>
             </form>
 
             <p className="auth-helper mt-6 text-sm">
               Already have an account?{' '}
-              <Link to="/login" className="auth-link font-semibold">
+              <Link
+                to="/login"
+                className="auth-link font-semibold"
+                onClick={(event) => {
+                  event.preventDefault();
+                  window.setTimeout(() => navigate('/login'), REDIRECT_DELAY_MS);
+                }}
+              >
                 Log in
               </Link>
             </p>

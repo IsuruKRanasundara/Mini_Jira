@@ -35,9 +35,7 @@ export type RegisterResponse = {
 };
 const staggeredBaseQuery = retry(
   fetchBaseQuery({
-    baseUrl:
-     
-      import.meta.env.Backend_URL||'https://mini-jira-three.vercel.app/api',
+    baseUrl: import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'https://mini-jira-three.vercel.app/api',
   }),
   {
     maxRetries: 3,

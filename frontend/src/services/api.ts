@@ -2,8 +2,7 @@
 
 const api = axios.create({
 	baseURL:
-		
-		import.meta.env.Backend_URL||'https://mini-jira-three.vercel.app/api',
+		import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_URL || 'https://mini-jira-three.vercel.app/api',
 	headers: {
 		"Content-Type": "application/json",
 	},

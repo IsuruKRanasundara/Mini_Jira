@@ -3,6 +3,7 @@ import LoginPage from '../pages/auth/LoginPage.tsx';
 import RegisterPage from '../pages/auth/RegisterPage.tsx';
 import LandingPage from '../pages/auth/LandingPage.tsx';
 import DashboardPage from '../pages/dashboard/DashboardPage';
+import OAuthCallbackPage from '../pages/auth/OAuthCallbackPage';
 const AppRoutes = () => {
   const { pathname } = useLocation();
 
@@ -20,6 +21,10 @@ const AppRoutes = () => {
 
   if (pathname === '/dashboard') {
     return <DashboardPage />;
+  }
+
+  if (pathname === '/auth/callback') {
+    return <OAuthCallbackPage />;
   }
 
   return (
