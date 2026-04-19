@@ -11,8 +11,21 @@ import type { JobApplicationCardData } from '../../components/board/ApplicationC
 import { type JobOpportunity } from '../../components/board/JobFeed';
 import {type Notification } from '../../components/board/NotificationsPanel';
 
+type ApplicationStatus = JobApplicationCardData['status'];
+
+type KanbanColumn = {
+  id: ApplicationStatus;
+  title: string;
+  icon: string;
+  color: string;
+  cards: JobApplicationCardData[];
+};
+
+const isApplicationStatus = (value: string): value is ApplicationStatus =>
+  value === 'applied' || value === 'interviewing' || value === 'offered';
+
 // Sample Data
-const initialKanbanColumns = [
+const initialKanbanColumns: KanbanColumn[] = [
   {
     id: 'applied' as const,
     title: 'Applied',
@@ -192,29 +205,45 @@ const DashboardPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'pipeline' | 'feed' | 'analytics'>('pipeline');
 
   const handleCardMove = (cardId: string, fromColumn: string, toColumn: string) => {
-    setKanbanColumns((cols) =>
-      cols.map((col) => ({
-        ...col,
-        cards: col.id === fromColumn ? col.cards.filter((c) => c.id !== cardId) : col.cards,
-      })),
-    );
+    if (!isApplicationStatus(fromColumn) || !isApplicationStatus(toColumn) || fromColumn === toColumn) {
+      return;
+    }
 
-    setKanbanColumns((cols) =>
-      cols.map((col) => {
-        if (col.id === toColumn) {
-          const card = kanbanColumns
-            .find((c) => c.id === fromColumn)
-            ?.cards.find((c) => c.id === cardId);
-          if (card) {
-            return {
-              ...col,
-              cards: [...col.cards, { ...card, status: toColumn  }],
-            };
-          }
+    setKanbanColumns((cols) => {
+      let movedCard: JobApplicationCardData | null = null;
+
+      const withoutSourceCard = cols.map((col) => {
+        if (col.id !== fromColumn) {
+          return col;
         }
-        return col;
-      }),
-    );
+
+        const cardToMove = col.cards.find((c) => c.id === cardId);
+        if (!cardToMove) {
+          return col;
+        }
+
+        movedCard = { ...cardToMove, status: toColumn };
+        return {
+          ...col,
+          cards: col.cards.filter((c) => c.id !== cardId),
+        };
+      });
+
+      if (!movedCard) {
+        return cols;
+      }
+
+      const cardToInsert = movedCard;
+
+      return withoutSourceCard.map((col) =>
+        col.id === toColumn
+          ? {
+              ...col,
+              cards: [...col.cards, cardToInsert],
+            }
+          : col,
+      );
+    });
   };
 
   const handleMarkAsRead = (notificationId: string) => {
