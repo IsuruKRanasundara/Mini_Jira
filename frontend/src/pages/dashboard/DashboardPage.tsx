@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import MainLayout from '../../components/layout/MainLayout';
 import KanbanBoard from '../../components/board/KanbanBoard';
@@ -9,7 +9,8 @@ import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import type { JobApplicationCardData } from '../../components/board/ApplicationCard';
 import { type JobOpportunity } from '../../components/board/JobFeed';
-import {type Notification } from '../../components/board/NotificationsPanel';
+import { type Notification } from '../../components/board/NotificationsPanel';
+import api from '../../services/api';
 
 type ApplicationStatus = JobApplicationCardData['status'];
 
@@ -24,185 +25,255 @@ type KanbanColumn = {
 const isApplicationStatus = (value: string): value is ApplicationStatus =>
   value === 'applied' || value === 'interviewing' || value === 'offered';
 
-// Sample Data
+type BackendJob = {
+  _id: string;
+  title: string;
+  description: string;
+  company: string;
+  location: string;
+  salaryRange?: {
+    min?: number;
+    max?: number;
+  };
+  jobType: 'Full-time' | 'Part-time' | 'Freelance';
+};
+
+type BackendApplication = {
+  _id: string;
+  jobId: string;
+  appliedDate: string;
+  applicationStatus: 'Pending' | 'Interview' | 'Rejected' | 'Offer';
+};
+
 const initialKanbanColumns: KanbanColumn[] = [
   {
     id: 'applied' as const,
     title: 'Applied',
     icon: '📄',
     color: 'info',
-    cards: [
-      {
-        id: '1',
-        companyName: 'Google',
-        jobTitle: 'Software Engineer',
-        appliedDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'applied' as const,
-      },
-      {
-        id: '2',
-        companyName: 'Microsoft',
-        jobTitle: 'Full Stack Developer',
-        appliedDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'applied' as const,
-      },
-      {
-        id: '3',
-        companyName: 'Meta',
-        jobTitle: 'React Developer',
-        appliedDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'applied' as const,
-      },
-    ],
+    cards: [],
   },
   {
     id: 'interviewing' as const,
     title: 'Interviewing',
     icon: '🎤',
     color: 'warning',
-    cards: [
-      {
-        id: '4',
-        companyName: 'Amazon',
-        jobTitle: 'Backend Engineer',
-        appliedDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'interviewing' as const,
-      },
-      {
-        id: '5',
-        companyName: 'Apple',
-        jobTitle: 'iOS Developer',
-        appliedDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'interviewing' as const,
-      },
-    ],
+    cards: [],
   },
   {
     id: 'offered' as const,
     title: 'Offered',
     icon: '🎉',
     color: 'success',
-    cards: [
-      {
-        id: '6',
-        companyName: 'Netflix',
-        jobTitle: 'Senior Engineer',
-        appliedDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        status: 'offered' as const,
-      },
-    ],
+    cards: [],
   },
 ];
 
-const jobOpportunities: JobOpportunity[] = [
-  {
-    id: '101',
-    company: 'Google',
-    role: 'Product Manager',
-    location: 'Mountain View, CA',
-    type: 'full-time',
-    experience: 'mid',
-    remote: true,
-    salary: '$150k - $180k',
-    description: 'Join Googles innovative product team...',
-  },
-  {
-    id: '102',
-    company: 'Microsoft',
-    role: 'Cloud Architect',
-    location: 'Seattle, WA',
-    type: 'full-time',
-    experience: 'senior',
-    remote: false,
-    salary: '$170k - $210k',
-    description: 'Design and implement cloud solutions...',
-  },
-  {
-    id: '103',
-    company: 'Meta',
-    role: 'Data Scientist',
-    location: 'Remote',
-    type: 'full-time',
-    experience: 'mid',
-    remote: true,
-    salary: '$140k - $170k',
-    description: 'Work with cutting-edge ML models...',
-  },
-  {
-    id: '104',
-    company: 'Amazon',
-    role: 'DevOps Engineer',
-    location: 'Austin, TX',
-    type: 'full-time',
-    experience: 'entry',
-    remote: true,
-    salary: '$120k - $140k',
-    description: 'Build and maintain AWS infrastructure...',
-  },
-  {
-    id: '105',
-    company: 'Apple',
-    role: 'UX Designer',
-    location: 'Cupertino, CA',
-    type: 'full-time',
-    experience: 'mid',
-    remote: false,
-    salary: '$130k - $160k',
-    description: 'Design next-generation Apple products...',
-  },
-  {
-    id: '106',
-    company: 'Netflix',
-    role: 'Content Creator',
-    location: 'Los Gatos, CA',
-    type: 'full-time',
-    experience: 'mid',
-    remote: true,
-    salary: '$125k - $155k',
-    description: 'Create engaging content for millions...',
-  },
-];
+const statusToKanbanStatus = (status: BackendApplication['applicationStatus']): ApplicationStatus | null => {
+  if (status === 'Pending') {
+    return 'applied';
+  }
 
-const initialNotifications: Notification[] = [
-  {
-    id: 'n1',
-    type: 'interview',
-    title: 'Interview Scheduled',
-    description: 'Google wants to schedule an interview for the Software Engineer position',
-    timestamp: new Date(Date.now() - 30 * 60 * 1000),
-    read: false,
-  },
-  {
-    id: 'n2',
-    type: 'application',
-    title: 'Application Submitted',
-    description: 'Your application for Full Stack Developer at Microsoft has been submitted',
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    read: false,
-  },
-  {
-    id: 'n3',
-    type: 'offer',
-    title: 'Offer Received',
-    description: 'Netflix has sent you an offer for the Senior Engineer position',
-    timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    read: false,
-  },
-  {
-    id: 'n4',
-    type: 'update',
-    title: 'Status Update',
-    description: 'Your application at Amazon has moved to the next round',
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    read: true,
-  },
-];
+  if (status === 'Interview') {
+    return 'interviewing';
+  }
+
+  if (status === 'Offer') {
+    return 'offered';
+  }
+
+  return null;
+};
+
+const formatSalary = (salaryRange?: BackendJob['salaryRange']) => {
+  if (!salaryRange?.min && !salaryRange?.max) {
+    return undefined;
+  }
+
+  const min = salaryRange.min ? `$${Math.round(salaryRange.min / 1000)}k` : 'N/A';
+  const max = salaryRange.max ? `$${Math.round(salaryRange.max / 1000)}k` : 'N/A';
+  return `${min} - ${max}`;
+};
+
+const inferExperience = (salaryRange?: BackendJob['salaryRange']): JobOpportunity['experience'] => {
+  const maxSalary = salaryRange?.max ?? 0;
+  if (maxSalary >= 130000) {
+    return 'senior';
+  }
+
+  if (maxSalary >= 80000) {
+    return 'mid';
+  }
+
+  return 'entry';
+};
+
+const readStoredUser = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const rawUser = window.localStorage.getItem('user');
+    if (!rawUser) {
+      return null;
+    }
+
+    const parsedUser = JSON.parse(rawUser) as { firstName?: string; lastName?: string } | null;
+    const firstName = parsedUser?.firstName?.trim() ?? '';
+    const lastName = parsedUser?.lastName?.trim() ?? '';
+
+    if (!firstName && !lastName) {
+      return null;
+    }
+
+    return {
+      firstName,
+      lastName,
+      displayName: [firstName, lastName].filter(Boolean).join(' ').trim(),
+    };
+  } catch {
+    return null;
+  }
+};
 
 const DashboardPage: React.FC = () => {
   const [kanbanColumns, setKanbanColumns] = useState(initialKanbanColumns);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [jobOpportunities, setJobOpportunities] = useState<JobOpportunity[]>([]);
   const [selectedCard, setSelectedCard] = useState<JobApplicationCardData | null>(null);
   const [activeTab, setActiveTab] = useState<'pipeline' | 'feed' | 'analytics'>('pipeline');
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadingError, setLoadingError] = useState<string | null>(null);
+  const [storedUser, setStoredUser] = useState<ReturnType<typeof readStoredUser>>(null);
+
+  useEffect(() => {
+    setStoredUser(readStoredUser());
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true);
+        setLoadingError(null);
+
+        const [jobsResponse, applicationsResponse] = await Promise.all([
+          api.get<{ data: BackendJob[] }>('/jobs'),
+          api.get<{ data: BackendApplication[] }>('/applications'),
+        ]);
+
+        const jobs = jobsResponse.data.data ?? [];
+        const applications = applicationsResponse.data.data ?? [];
+        const jobsById = new Map(jobs.map((job) => [job._id, job]));
+
+        const mappedJobs: JobOpportunity[] = jobs.map((job) => ({
+          id: job._id,
+          company: job.company,
+          role: job.title,
+          location: job.location,
+          type: job.jobType === 'Full-time' ? 'full-time' : job.jobType === 'Part-time' ? 'part-time' : 'contract',
+          experience: inferExperience(job.salaryRange),
+          remote: /remote/i.test(job.location),
+          salary: formatSalary(job.salaryRange),
+          description: job.description,
+        }));
+
+        const mappedCards: JobApplicationCardData[] = applications
+          .map((application) => {
+            const status = statusToKanbanStatus(application.applicationStatus);
+            const relatedJob = jobsById.get(application.jobId);
+
+            if (!status || !relatedJob) {
+              return null;
+            }
+
+            return {
+              id: application._id,
+              companyName: relatedJob.company,
+              jobTitle: relatedJob.title,
+              appliedDate: application.appliedDate,
+              status,
+            };
+          })
+          .filter((card): card is JobApplicationCardData => card !== null);
+
+        setKanbanColumns([
+          {
+            id: 'applied',
+            title: 'Applied',
+            icon: '📄',
+            color: 'info',
+            cards: mappedCards.filter((card) => card.status === 'applied'),
+          },
+          {
+            id: 'interviewing',
+            title: 'Interviewing',
+            icon: '🎤',
+            color: 'warning',
+            cards: mappedCards.filter((card) => card.status === 'interviewing'),
+          },
+          {
+            id: 'offered',
+            title: 'Offered',
+            icon: '🎉',
+            color: 'success',
+            cards: mappedCards.filter((card) => card.status === 'offered'),
+          },
+        ]);
+
+        setJobOpportunities(mappedJobs);
+
+        const latestNotifications: Notification[] = applications
+          .slice()
+          .sort((a, b) => new Date(b.appliedDate).getTime() - new Date(a.appliedDate).getTime())
+          .slice(0, 8)
+          .map((application) => {
+            const relatedJob = jobsById.get(application.jobId);
+            const companyName = relatedJob?.company ?? 'Unknown company';
+            const jobTitle = relatedJob?.title ?? 'Unknown role';
+
+            if (application.applicationStatus === 'Interview') {
+              return {
+                id: application._id,
+                type: 'interview' as const,
+                title: 'Interview Stage',
+                description: `Your application for ${jobTitle} at ${companyName} is now in interview stage.`,
+                timestamp: new Date(application.appliedDate),
+                read: false,
+              };
+            }
+
+            if (application.applicationStatus === 'Offer') {
+              return {
+                id: application._id,
+                type: 'offer' as const,
+                title: 'Offer Stage',
+                description: `Your application for ${jobTitle} at ${companyName} reached offer stage.`,
+                timestamp: new Date(application.appliedDate),
+                read: false,
+              };
+            }
+
+            return {
+              id: application._id,
+              type: 'application' as const,
+              title: 'Application Update',
+              description: `Application recorded for ${jobTitle} at ${companyName}.`,
+              timestamp: new Date(application.appliedDate),
+              read: false,
+            };
+          });
+
+        setNotifications(latestNotifications);
+      } catch {
+        setLoadingError('Unable to load live dashboard data. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void fetchDashboardData();
+  }, []);
 
   const handleCardMove = (cardId: string, fromColumn: string, toColumn: string) => {
     if (!isApplicationStatus(fromColumn) || !isApplicationStatus(toColumn) || fromColumn === toColumn) {
@@ -266,19 +337,23 @@ const DashboardPage: React.FC = () => {
   const totalApplications = kanbanColumns.reduce((sum, col) => sum + col.cards.length, 0);
   const totalInterviews = kanbanColumns.find((c) => c.id === 'interviewing')?.cards.length || 0;
   const totalOffers = kanbanColumns.find((c) => c.id === 'offered')?.cards.length || 0;
+  const dashboardSubtitle =
+    isLoading && !loadingError
+      ? 'Loading live dashboard data...'
+      : `Showing ${jobOpportunities.length} live jobs, ${totalApplications} applications, and ${notifications.length} updates from the API.`;
 
   return (
     <MainLayout>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
         {/* Header */}
-        <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Welcome back, John Doe 👋
-          </h1>
-          <p className="text-lg text-gray-600 dark:text-gray-400">
-            Track your job applications and manage your career journey
-          </p>
-        </motion.div>
+        {storedUser && (
+          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
+            <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
+              Welcome back, {storedUser.displayName} 👋
+            </h1>
+            <p className="text-lg text-gray-600 dark:text-gray-400">{dashboardSubtitle}</p>
+          </motion.div>
+        )}
 
         {/* Tab Navigation */}
         <motion.div
@@ -318,9 +393,17 @@ const DashboardPage: React.FC = () => {
               {activeTab === 'pipeline' && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                      Job Application Pipeline
-                    </h2>
+                    {storedUser && (
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                        Job Application Pipeline
+                      </h2>
+                    )}
+                    {isLoading && (
+                      <p className="text-gray-600 dark:text-gray-400">Loading applications...</p>
+                    )}
+                    {loadingError && (
+                      <p className="text-red-600 dark:text-red-400">{loadingError}</p>
+                    )}
                     <KanbanBoard
                       columns={kanbanColumns}
                       onCardMove={handleCardMove}
@@ -333,9 +416,17 @@ const DashboardPage: React.FC = () => {
               {activeTab === 'feed' && (
                 <div className="space-y-6">
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-                      Recommended Job Opportunities
-                    </h2>
+                    {storedUser && (
+                      <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+                        Recommended Job Opportunities
+                      </h2>
+                    )}
+                    {isLoading && (
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">Loading job advertisements...</p>
+                    )}
+                    {loadingError && (
+                      <p className="text-red-600 dark:text-red-400 mb-4">{loadingError}</p>
+                    )}
                     <JobFeed jobs={jobOpportunities} onApply={handleApplyJob} />
                   </div>
                 </div>
