@@ -16,6 +16,13 @@ type LoginResponse = {
   };
 };
 
+type GoogleLoginPayload = {
+  credential?: string;
+  accessToken?: string;
+};
+
+type GoogleLoginResponse = LoginResponse;
+
 
 export type RegisterPayload = {
 	firstName: string;
@@ -42,6 +49,8 @@ const staggeredBaseQuery = retry(
   },
 );
 
+const googleAuthEndpoint = import.meta.env.VITE_GOOGLE_AUTH_ENDPOINT || '/auth/google';
+
 export const authApi = createApi({
   reducerPath: "authApi",
   baseQuery: staggeredBaseQuery,
@@ -54,6 +63,14 @@ export const authApi = createApi({
       }),
       extraOptions: { maxRetries: 5 },
     }),
+    loginWithGoogle: builder.mutation<GoogleLoginResponse, GoogleLoginPayload>({
+      query: (payload) => ({
+        url: googleAuthEndpoint,
+        method: "POST",
+        body: payload,
+      }),
+      extraOptions: { maxRetries: 2 },
+    }),
     register: builder.mutation<RegisterResponse, RegisterPayload>({
       query: (payload) => ({
         url: "/users/register",
@@ -65,4 +82,4 @@ export const authApi = createApi({
   }),
 });
 
-export const { useLoginMutation, useRegisterMutation } = authApi;
+export const { useLoginMutation, useLoginWithGoogleMutation, useRegisterMutation } = authApi;

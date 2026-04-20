@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useGoogleLogin } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useLoginMutation } from '../../store/api/authApi';
+import { saveAuthSession } from '../../services/authSession';
+import { useLoginMutation, useLoginWithGoogleMutation } from '../../store/api/authApi';
 import { useTheme } from '../../context/ThemeContext';
 import { startOAuthLogin } from '../../services/oauthService';
 import './AuthPages.css';
@@ -32,6 +34,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [loginMutation] = useLoginMutation();
+  const [loginWithGoogleMutation] = useLoginWithGoogleMutation();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -41,6 +44,7 @@ export default function LoginPage() {
   const [touched, setTouched] = useState({ email: false, password: false });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
+  const isGoogleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
   useEffect(() => {
     if (!toast) return;
@@ -51,6 +55,19 @@ export default function LoginPage() {
   const emailError = useMemo(() => validateEmail(email), [email]);
   const passwordError = useMemo(() => validatePassword(password), [password]);
   const canSubmit = !emailError && !passwordError && email.length > 0 && password.length > 0;
+
+  function extractApiMessage(error: unknown, fallbackMessage: string) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'data' in error &&
+      typeof (error as { data?: { message?: string } }).data?.message === 'string'
+    ) {
+      return (error as { data: { message: string } }).data.message;
+    }
+
+    return fallbackMessage;
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,27 +86,83 @@ export default function LoginPage() {
     loginMutation({ email: email.trim(), password })
       .unwrap()
       .then((response) => {
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('user', JSON.stringify(response.data));
+        saveAuthSession(response.token, response.data);
         setToast({ message: response.message || 'Welcome back!', type: 'success' });
         window.setTimeout(() => navigate('/dashboard'), REDIRECT_DELAY_MS);
       })
       .catch((error: unknown) => {
-        const message =
-          typeof error === 'object' &&
-          error !== null &&
-          'data' in error &&
-          typeof (error as { data?: { message?: string } }).data?.message === 'string'
-            ? (error as { data: { message: string } }).data.message
-            : 'Login failed. Please try again.';
-
+        const message = extractApiMessage(error, 'Login failed. Please try again.');
         setToast({ message, type: 'error' });
       })
       .finally(() => setLoading(false));
   }
 
+  const triggerGoogleLogin = useGoogleLogin({
+    scope: 'openid email profile',
+    onSuccess: (tokenResponse) => {
+      const accessToken = tokenResponse.access_token;
+
+      if (!accessToken) {
+        setSocialLoading(null);
+        setToast({ message: 'Google login returned no access token.', type: 'error' });
+        return;
+      }
+
+      loginWithGoogleMutation({ accessToken })
+        .unwrap()
+        .then((response) => {
+          saveAuthSession(response.token, response.data);
+          setToast({ message: response.message || 'Signed in with Google successfully.', type: 'success' });
+          window.setTimeout(() => navigate('/dashboard'), REDIRECT_DELAY_MS);
+        })
+        .catch((error: unknown) => {
+          const message = extractApiMessage(error, 'Google sign-in failed. Please try again.');
+          setToast({ message, type: 'error' });
+        })
+        .finally(() => setSocialLoading(null));
+    },
+    onError: () => {
+      setSocialLoading(null);
+      setToast({ message: 'Google sign-in was not completed.', type: 'error' });
+    },
+    onNonOAuthError: (error) => {
+      setSocialLoading(null);
+
+      if (error.type === 'popup_closed') {
+        setToast({ message: 'Google sign-in was canceled.', type: 'error' });
+        return;
+      }
+
+      if (error.type === 'popup_failed_to_open') {
+        setToast({ message: 'Google popup failed to open. Please allow popups and retry.', type: 'error' });
+        return;
+      }
+
+      setToast({ message: 'Google sign-in could not be started. Please retry.', type: 'error' });
+    },
+  });
+
+  function handleGoogleLogin() {
+    if (socialLoading || loading) {
+      return;
+    }
+
+    if (!isGoogleConfigured) {
+      setToast({ message: 'Google auth is not configured. Set VITE_GOOGLE_CLIENT_ID.', type: 'error' });
+      return;
+    }
+
+    setSocialLoading('google');
+    triggerGoogleLogin();
+  }
+
   function handleSocial(provider: 'google' | 'linkedin') {
     if (socialLoading) return;
+
+    if (provider === 'google') {
+      handleGoogleLogin();
+      return;
+    }
 
     try {
       setSocialLoading(provider);
@@ -255,7 +328,7 @@ export default function LoginPage() {
                   onClick={() => handleSocial('google')}
                 >
                   <GoogleIcon />
-                  {socialLoading === 'google' ? 'Redirecting...' : 'Google'}
+                  {socialLoading === 'google' ? 'Connecting...' : 'Google'}
                 </motion.button>
 
                 <motion.button
@@ -290,7 +363,7 @@ export default function LoginPage() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.55, ease: 'easeOut' }}
-            className="hidden border-l border-[var(--lp-border)] p-8 lg:block"
+              className="hidden border-l border-(--lp-border) p-8 lg:block"
           >
             <div className="auth-illustration-box h-full rounded-3xl p-6">
               <div className="mb-4">
@@ -302,11 +375,11 @@ export default function LoginPage() {
 
               <div className="mt-5 space-y-3">
                 <div className="auth-card rounded-xl p-3">
-                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--lp-accent)]">Signal</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-(--lp-accent)">Signal</p>
                   <p className="auth-helper mt-1 text-sm">3 new job recommendations based on your updated CV profile.</p>
                 </div>
                 <div className="auth-card rounded-xl p-3">
-                  <p className="text-xs uppercase tracking-[0.16em] text-[var(--lp-accent)]">Reminder</p>
+                  <p className="text-xs uppercase tracking-[0.16em] text-(--lp-accent)">Reminder</p>
                   <p className="auth-helper mt-1 text-sm">1 interview follow-up due today in your Interview column.</p>
                 </div>
               </div>
@@ -320,7 +393,7 @@ export default function LoginPage() {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          className={`auth-toast fixed left-1/2 top-4 z-[60] -translate-x-1/2 px-4 py-2 text-sm font-medium ${
+          className={`auth-toast fixed left-1/2 top-4 z-60 -translate-x-1/2 px-4 py-2 text-sm font-medium ${
             toast.type === 'success' ? 'auth-toast-success' : 'auth-toast-error'
           }`}
         >
