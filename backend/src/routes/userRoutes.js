@@ -39,6 +39,8 @@ const updateValidator = [
 
 router.post('/register', registerValidator, userController.registerUser);
 router.post('/login', loginValidator, userController.loginUser);
+router.get('/oauth/google', userController.startGoogleOAuth);
+router.get('/oauth/google/callback', userController.handleGoogleOAuthCallback);
 router.get('/', userController.getUsers);
 router.get('/:id', objectIdParamValidator, userController.getUser);
 router.put('/:id', [...objectIdParamValidator, ...updateValidator], userController.updateUser);

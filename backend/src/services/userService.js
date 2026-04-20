@@ -13,6 +13,33 @@ const getAllUsers = async () => {
   return User.find();
 };
 
+const findOrCreateOAuthUser = async ({
+  email,
+  firstName,
+  lastName,
+  profilePicture,
+  password,
+}) => {
+  const existingUser = await User.findOne({ email });
+
+  if (existingUser) {
+    if (profilePicture && existingUser.profilePicture !== profilePicture) {
+      existingUser.profilePicture = profilePicture;
+      await existingUser.save();
+    }
+
+    return existingUser;
+  }
+
+  return User.create({
+    email,
+    firstName,
+    lastName,
+    profilePicture,
+    password,
+  });
+};
+
 const getUserById = async (id) => {
   return User.findById(id);
 };
@@ -42,6 +69,7 @@ const deleteUserById = async (id) => {
 module.exports = {
   createUser,
   findUserByEmail,
+  findOrCreateOAuthUser,
   getAllUsers,
   getUserById,
   updateUserById,
