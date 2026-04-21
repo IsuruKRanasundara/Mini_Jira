@@ -1,11 +1,10 @@
 export type OAuthProvider = 'google' | 'linkedin';
 
-const providerConfig: Record<OAuthProvider, { envKey: string; label: string; localEnvKey?: string; localDefaultUrl?: string }> = {
+const providerConfig: Record<OAuthProvider, { envKey: string; label: string; localEnvKey?: string }> = {
   google: {
     envKey: 'VITE_GOOGLE_AUTH_URL',
     label: 'Google',
     localEnvKey: 'VITE_GOOGLE_AUTH_URL_LOCAL',
-    localDefaultUrl: 'http://localhost:5000/api/users/oauth/google',
   },
   linkedin: {
     envKey: 'VITE_LINKEDIN_AUTH_URL',
@@ -21,15 +20,17 @@ const appendQueryParam = (url: URL, key: string, value: string) => {
   }
 };
 
-const isLocalDevOrigin = () => ['localhost', '127.0.0.1'].includes(window.location.hostname);
-
 const resolveAuthUrl = (provider: OAuthProvider) => {
   const config = providerConfig[provider];
   const primaryUrl = import.meta.env[config.envKey as keyof ImportMetaEnv] as string | undefined;
 
-  if (isLocalDevOrigin() && config.localEnvKey) {
-    const localUrl = import.meta.env[config.localEnvKey as keyof ImportMetaEnv] as string | undefined;
-    return localUrl || config.localDefaultUrl || primaryUrl || null;
+  if (provider === 'google') {
+    const useLocalUrl = import.meta.env.VITE_GOOGLE_USE_LOCAL_AUTH === 'true';
+
+    if (useLocalUrl && config.localEnvKey) {
+      const localUrl = import.meta.env[config.localEnvKey as keyof ImportMetaEnv] as string | undefined;
+      return localUrl || primaryUrl || null;
+    }
   }
 
   return primaryUrl || null;

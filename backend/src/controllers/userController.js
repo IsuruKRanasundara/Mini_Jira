@@ -12,14 +12,14 @@ const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USER_INFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
-const getBackendCallbackUrl = (req) => {
+const getBackendOAuthUrl = (req) => {
   if (process.env.GOOGLE_CALLBACK_URL) {
     return process.env.GOOGLE_CALLBACK_URL;
   }
 
   const forwardedProto = req.get('x-forwarded-proto');
   const protocol = forwardedProto || req.protocol;
-  return `${protocol}://${req.get('host')}/api/users/oauth/google/callback`;
+  return `${protocol}://${req.get('host')}/api/users/oauth/google`;
 };
 
 const getFrontendCallbackUrl = () => {
@@ -78,8 +78,12 @@ const buildFrontendRedirectUrl = (redirectUri, token, user) => {
 };
 
 const startGoogleOAuth = asyncHandler(async (req, res) => {
+  if (typeof req.query.code === 'string' && req.query.code) {
+    return handleGoogleOAuthCallback(req, res);
+  }
+
   const clientId = process.env.GOOGLE_CLIENT_ID;
-  const callbackUrl = getBackendCallbackUrl(req);
+  const callbackUrl = getBackendOAuthUrl(req);
 
   if (!clientId) {
     return res.status(500).json({ message: 'GOOGLE_CLIENT_ID is not configured' });
@@ -134,7 +138,7 @@ const handleGoogleOAuthCallback = asyncHandler(async (req, res) => {
       code,
       client_id: clientId,
       client_secret: clientSecret,
-      redirect_uri: getBackendCallbackUrl(req),
+      redirect_uri: getBackendOAuthUrl(req),
       grant_type: 'authorization_code',
     }),
   });
