@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { useGoogleLogin } from '@react-oauth/google';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { saveAuthSession } from '../../services/authSession';
-import { useLoginMutation, useLoginWithGoogleMutation } from '../../store/api/authApi';
+import { useLoginMutation } from '../../store/api/authApi';
 import { useTheme } from '../../context/ThemeContext';
 import { startOAuthLogin } from '../../services/oauthService';
 import './AuthPages.css';
@@ -34,7 +33,6 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [loginMutation] = useLoginMutation();
-  const [loginWithGoogleMutation] = useLoginWithGoogleMutation();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -44,7 +42,6 @@ export default function LoginPage() {
   const [touched, setTouched] = useState({ email: false, password: false });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
-  const isGoogleConfigured = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
   useEffect(() => {
     if (!toast) return;
@@ -97,63 +94,21 @@ export default function LoginPage() {
       .finally(() => setLoading(false));
   }
 
-  const triggerGoogleLogin = useGoogleLogin({
-    scope: 'openid email profile',
-    onSuccess: (tokenResponse) => {
-      const accessToken = tokenResponse.access_token;
-
-      if (!accessToken) {
-        setSocialLoading(null);
-        setToast({ message: 'Google login returned no access token.', type: 'error' });
-        return;
-      }
-
-      loginWithGoogleMutation({ accessToken })
-        .unwrap()
-        .then((response) => {
-          saveAuthSession(response.token, response.data);
-          setToast({ message: response.message || 'Signed in with Google successfully.', type: 'success' });
-          window.setTimeout(() => navigate('/dashboard'), REDIRECT_DELAY_MS);
-        })
-        .catch((error: unknown) => {
-          const message = extractApiMessage(error, 'Google sign-in failed. Please try again.');
-          setToast({ message, type: 'error' });
-        })
-        .finally(() => setSocialLoading(null));
-    },
-    onError: () => {
-      setSocialLoading(null);
-      setToast({ message: 'Google sign-in was not completed.', type: 'error' });
-    },
-    onNonOAuthError: (error) => {
-      setSocialLoading(null);
-
-      if (error.type === 'popup_closed') {
-        setToast({ message: 'Google sign-in was canceled.', type: 'error' });
-        return;
-      }
-
-      if (error.type === 'popup_failed_to_open') {
-        setToast({ message: 'Google popup failed to open. Please allow popups and retry.', type: 'error' });
-        return;
-      }
-
-      setToast({ message: 'Google sign-in could not be started. Please retry.', type: 'error' });
-    },
-  });
-
   function handleGoogleLogin() {
     if (socialLoading || loading) {
       return;
     }
 
-    if (!isGoogleConfigured) {
-      setToast({ message: 'Google auth is not configured. Set VITE_GOOGLE_CLIENT_ID.', type: 'error' });
-      return;
+    try {
+      setSocialLoading('google');
+      startOAuthLogin('google');
+    } catch (error) {
+      setSocialLoading(null);
+      setToast({
+        message: error instanceof Error ? error.message : 'Google auth is not configured.',
+        type: 'error',
+      });
     }
-
-    setSocialLoading('google');
-    triggerGoogleLogin();
   }
 
   function handleSocial(provider: 'google' | 'linkedin') {
@@ -173,7 +128,7 @@ export default function LoginPage() {
         message:
           error instanceof Error
             ? error.message
-            : `${provider === 'google' ? 'Google' : 'LinkedIn'} auth is not configured.`,
+            : 'LinkedIn auth is not configured.',
         type: 'error',
       });
     }
