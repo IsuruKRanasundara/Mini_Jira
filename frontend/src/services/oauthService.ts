@@ -25,9 +25,9 @@ const resolveAuthUrl = (provider: OAuthProvider) => {
   const primaryUrl = import.meta.env[config.envKey as keyof ImportMetaEnv] as string | undefined;
 
   if (provider === 'google') {
-    const useLocalUrl = import.meta.env.VITE_GOOGLE_USE_LOCAL_AUTH === 'true';
+    const allowLocalOverride = import.meta.env.DEV;
 
-    if (useLocalUrl && config.localEnvKey) {
+    if (allowLocalOverride && config.localEnvKey) {
       const localUrl = import.meta.env[config.localEnvKey as keyof ImportMetaEnv] as string | undefined;
       return localUrl || primaryUrl || null;
     }
