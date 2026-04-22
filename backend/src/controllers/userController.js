@@ -14,12 +14,22 @@ const GOOGLE_USER_INFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 const getBackendOAuthUrl = (req) => {
   if (process.env.GOOGLE_CALLBACK_URL) {
-    return process.env.GOOGLE_CALLBACK_URL;
+    try {
+      const configured = new URL(process.env.GOOGLE_CALLBACK_URL);
+      const isLocalHost = configured.hostname === 'localhost' || configured.hostname === '127.0.0.1';
+
+      // Never use localhost callback URLs in production.
+      if (!(process.env.NODE_ENV === 'production' && isLocalHost)) {
+        return process.env.GOOGLE_CALLBACK_URL;
+      }
+    } catch {
+      // Fall back to request-derived callback URL when configured value is invalid.
+    }
   }
 
   const forwardedProto = req.get('x-forwarded-proto');
   const protocol = forwardedProto || req.protocol;
-  return `${protocol}://${req.get('host')}/api/users/oauth/google`;
+  return `${protocol}://${req.get('host')}/api/users/oauth/google/callback`;
 };
 
 const getFrontendCallbackUrl = () => {
@@ -78,10 +88,6 @@ const buildFrontendRedirectUrl = (redirectUri, token, user) => {
 };
 
 const startGoogleOAuth = asyncHandler(async (req, res) => {
-  if (typeof req.query.code === 'string' && req.query.code) {
-    return handleGoogleOAuthCallback(req, res);
-  }
-
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const callbackUrl = getBackendOAuthUrl(req);
 
