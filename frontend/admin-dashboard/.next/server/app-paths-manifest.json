@@ -1,10 +1,9 @@
 {
-  "/page": "app/page.js",
   "/(dashboard)/admin/page": "app/(dashboard)/admin/page.js",
   "/(dashboard)/admin/jobs/page": "app/(dashboard)/admin/jobs/page.js",
   "/(dashboard)/admin/workflow/page": "app/(dashboard)/admin/workflow/page.js",
-  "/(dashboard)/admin/companies/page": "app/(dashboard)/admin/companies/page.js",
   "/(dashboard)/admin/reports/page": "app/(dashboard)/admin/reports/page.js",
+  "/(dashboard)/admin/companies/page": "app/(dashboard)/admin/companies/page.js",
   "/(dashboard)/admin/tasks/page": "app/(dashboard)/admin/tasks/page.js",
   "/(dashboard)/admin/settings/page": "app/(dashboard)/admin/settings/page.js"
 }
