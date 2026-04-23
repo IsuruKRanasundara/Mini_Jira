@@ -1,0 +1,52 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 205 40% 98%;
+  --foreground: 215 25% 13%;
+  --card: 0 0% 100%;
+  --card-foreground: 215 25% 13%;
+  --muted: 210 35% 95%;
+  --muted-foreground: 215 15% 40%;
+  --border: 215 25% 86%;
+  --input: 215 25% 86%;
+  --primary: 202 88% 40%;
+  --primary-foreground: 210 40% 98%;
+  --accent: 171 53% 94%;
+  --accent-foreground: 173 90% 20%;
+  --success: 142 71% 35%;
+  --warning: 34 94% 45%;
+  --danger: 0 72% 45%;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: 216 28% 8%;
+  --foreground: 213 30% 95%;
+  --card: 216 30% 11%;
+  --card-foreground: 213 30% 95%;
+  --muted: 217 21% 16%;
+  --muted-foreground: 215 16% 70%;
+  --border: 217 20% 24%;
+  --input: 217 20% 24%;
+  --primary: 197 92% 53%;
+  --primary-foreground: 216 28% 8%;
+  --accent: 174 46% 17%;
+  --accent-foreground: 169 85% 73%;
+  --success: 142 72% 42%;
+  --warning: 39 93% 50%;
+  --danger: 0 84% 60%;
+}
+
+* {
+  @apply border-border;
+}
+
+body {
+  @apply bg-background font-sans text-foreground antialiased;
+  background-image: radial-gradient(circle at 10% 0%, rgba(56, 189, 248, 0.11), transparent 32%),
+    radial-gradient(circle at 85% 12%, rgba(20, 184, 166, 0.08), transparent 28%);
+}
