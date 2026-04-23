@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bell, BriefcaseBusiness, Building2, CheckCheck, ChartNoAxesCombined, LayoutDashboard, ListTodo, Menu, Moon, Search, Settings, Sun } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAdminData } from "@/context/admin-data-context";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,8 +30,16 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   const unreadCount = useMemo(() => notifications.filter((item) => item.unread).length, [notifications]);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+
+    return () => {
+      document.documentElement.classList.remove("dark");
+    };
+  }, [dark]);
+
   return (
-    <div className={cn("min-h-screen", dark && "dark")}>
+    <div className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
         <aside
           className={cn(
